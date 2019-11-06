@@ -213,7 +213,7 @@ int main(int argc, char** argv)
 	//pcl::visualization::CloudViewer viewer("Simple Cloud Viewer");
 
 	// Initial ROS
-	ros::init(argc, argv, "dlo_state_estimation");
+	ros::init(argc, argv, "do_tracking");
 	ros::NodeHandle nh;
 
 	// Create a ROS subscriber for the input depth data
