@@ -4,6 +4,7 @@
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
+#include <pcl/point_types_conversion.h>
 #include <pcl/filters/voxel_grid.h>
 #include <pcl/visualization/cloud_viewer.h>
 #include <pcl/io/io.h>
@@ -19,7 +20,8 @@
 
 #define FRAME_BASE 30
 #define DESTINATION_RATE 15
-#define OUTPUT_DEBUG_INFO true
+#define OUTPUT_TIME_INFO false 
+#define OUTPUT_DEBUG_INFO false
 
 ros::Publisher pub;
 int cb_count = 0;
@@ -27,11 +29,12 @@ int cb_count = 0;
 void cloud_cb(const sensor_msgs::PointCloud2ConstPtr & input)
 {
 	cb_count++;
-	std::cout << "cb_count = " << cb_count << std::endl;
+	if (OUTPUT_DEBUG_INFO == true)
+		std::cout << "cb_count = " << cb_count << std::endl;
+
 	if (cb_count == int(FRAME_BASE)/int(DESTINATION_RATE))
 	{
 		cb_count = 0;
-		sensor_msgs::PointCloud2 output;
 
 		////////////////////////////////////////////////////
 		// Convert pcl::PCLPointCloud2 to pcl::PointCloud<T>
@@ -57,13 +60,14 @@ void cloud_cb(const sensor_msgs::PointCloud2ConstPtr & input)
 		auto toc_voxel = std::chrono::high_resolution_clock::now();
 		std::chrono::microseconds dur_ms;
 		std::chrono::duration<double, std::milli> dur_voxel_ms = toc_voxel - tic_voxel; 
-		std::cout << "Voxel filtering duration(ms) >>> " << dur_voxel_ms.count() << std::endl;
+		if (OUTPUT_TIME_INFO == true)
+			std::cout << "Voxel filtering duration(ms) >>> " << dur_voxel_ms.count() << std::endl;
 
 		////////////////////////////////////////////////////
 		// Color segmentation
 		////////////////////////////////////////////////////
 		auto tic_seg = std::chrono::high_resolution_clock::now();
-		pcl::PointCloud<pcl::PointXYZRGB>* colorFiltered = new pcl::PointCloud<pcl::PointXYZRGB>;
+		pcl::PointCloud<pcl::PointXYZRGB> * colorFiltered = new pcl::PointCloud<pcl::PointXYZRGB>;
 		
 		int count = 0;
 		for (size_t i = 0; i < voxelFiltered->size(); i++)
@@ -81,18 +85,33 @@ void cloud_cb(const sensor_msgs::PointCloud2ConstPtr & input)
 				count ++;
 			}
 		}
-		std::cout << "Numbers of point cloud of the calbe >>> " << count << std::endl;
+		if (OUTPUT_DEBUG_INFO == true)
+			std::cout << "Numbers of point cloud of the calbe >>> " << count << std::endl;
 
 		auto toc_seg = std::chrono::high_resolution_clock::now();
 		std::chrono::duration<double, std::milli> dur_seg_ms = toc_seg - tic_seg; 
-		std::cout << "Color segmentation duration(ms) >>> " << dur_seg_ms.count() << std::endl;
+		if (OUTPUT_TIME_INFO == true)
+			std::cout << "Color segmentation duration(ms) >>> " << dur_seg_ms.count() << std::endl;
+
+		////////////////////////////////////////////////////
+		// HSV segmentation
+		////////////////////////////////////////////////////
+		auto tic_hsv = std::chrono::high_resolution_clock::now();
+		pcl::PointCloud<pcl::PointXYZHSV> * ptrCloudHSV = new (pcl::PointCloud<pcl::PointXYZHSV>); 
+		pcl::PointCloudXYZRGBtoXYZHSV(*voxelFiltered, *ptrCloudHSV);
+
+		auto toc_hsv = std::chrono::high_resolution_clock::now();
+		std::chrono::duration<double, std::milli> dur_hsv_ms = toc_hsv - tic_hsv; 
+		if (OUTPUT_TIME_INFO == true)
+			std::cout << "HSV segmentation duration(ms) >>> " << dur_hsv_ms.count() << std::endl;
 
 		////////////////////////////////////////////////////
 		// pcl::PointXYZRGB -> Eigen::MatrixXd
 		////////////////////////////////////////////////////
 		size_t nrows = colorFiltered->size();
 		size_t ncols = 3;
-		std::cout << "Fixed point cloud size (dataFixed) >>> " << nrows << std::endl;
+		if (OUTPUT_DEBUG_INFO == true)
+			std::cout << "Fixed point cloud size (dataFixed) >>> " << nrows << std::endl;
 		Eigen::MatrixXd dataFixed(nrows, ncols);
 		for (size_t i = 0; i < nrows; i++)
 		{
@@ -109,6 +128,7 @@ void cloud_cb(const sensor_msgs::PointCloud2ConstPtr & input)
 		static Eigen::MatrixXd gen_pointset(15, 3);
 		static int loop_cpd = 0;
 		loop_cpd++;
+		if (OUTPUT_DEBUG_INFO == true)
 		std::cout << "Current loop of CPD >>> " << loop_cpd << std::endl;
 		if (loop_cpd == 1)
 		{
@@ -142,7 +162,7 @@ void cloud_cb(const sensor_msgs::PointCloud2ConstPtr & input)
 				gen_pointset(index + i, 1) = 0.0;
 				gen_pointset(index + i, 2) = 0.0;
 			}
-			index = 2*gen_pointset.rows()/3;
+			index = 2 * gen_pointset.rows() / 3;
 			for (size_t i = 0; i < gen_pointset.rows()/3; i++)
 			{
 				//gen_pointset(index + i, 0) = ((double)(i))/3 - 0.5;
@@ -164,13 +184,15 @@ void cloud_cb(const sensor_msgs::PointCloud2ConstPtr & input)
 		}
 		auto toc_cpd = std::chrono::high_resolution_clock::now();
 		std::chrono::duration<double, std::milli> dur_cpd_ms = toc_cpd - tic_cpd;
-		std::cout << "CPD duration(ms) >>> " << dur_cpd_ms.count() << std::endl;
+		if (OUTPUT_TIME_INFO == true)
+			std::cout << "CPD duration(ms) >>> " << dur_cpd_ms.count() << std::endl;
 
 		////////////////////////////////////////////////////
 		// Translate Eigen::MatrixXf to PointXYZRGB
 		////////////////////////////////////////////////////
 		pcl::PointCloud<pcl::PointXYZRGB> * pointsDisplay = new (pcl::PointCloud<pcl::PointXYZRGB>);
 		pcl::PointXYZRGB p;
+		sensor_msgs::PointCloud2 output;
 
 		for (size_t i = 0; i < colorFiltered->size(); i++)
 		{
