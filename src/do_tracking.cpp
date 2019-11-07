@@ -74,8 +74,8 @@ void cloud_cb(const sensor_msgs::PointCloud2ConstPtr & input)
 			//if (voxelFiltered->points[i].r < 40 && voxelFiltered->points[i].g < 40 && voxelFiltered->points[i].b > 60)
 			// For nappe plane
 			if ((100 <= voxelFiltered->points[i].r && voxelFiltered->points[i].r <= 255) &&
-					(0 <= voxelFiltered->points[i].g && voxelFiltered->points[i].g <= 100) && 
-					(0 <= voxelFiltered->points[i].b && voxelFiltered->points[i].b <= 100))
+						(0 <= voxelFiltered->points[i].g && voxelFiltered->points[i].g <= 100) && 
+							(0 <= voxelFiltered->points[i].b && voxelFiltered->points[i].b <= 100))
 			{
 				colorFiltered->push_back(voxelFiltered->points[i]);
 				count ++;
