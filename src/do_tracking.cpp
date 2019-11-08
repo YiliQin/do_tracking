@@ -1,10 +1,11 @@
 #include <ros/ros.h>
 #include <sensor_msgs/PointCloud2.h>
 
-#include <pcl_conversions/pcl_conversions.h>
+#include <pcl/pcl_config.h>
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 #include <pcl/point_types_conversion.h>
+#include <pcl_conversions/pcl_conversions.h>
 #include <pcl/filters/voxel_grid.h>
 #include <pcl/visualization/cloud_viewer.h>
 #include <pcl/io/io.h>
@@ -20,8 +21,9 @@
 
 #define FRAME_BASE 30
 #define DESTINATION_RATE 15
-#define OUTPUT_TIME_INFO false 
+#define OUTPUT_TIME_INFO true
 #define OUTPUT_DEBUG_INFO false
+#define DISPLAY_SELECT 2
 
 ros::Publisher pub;
 int cb_count = 0;
@@ -43,7 +45,7 @@ void cloud_cb(const sensor_msgs::PointCloud2ConstPtr & input)
 		pcl::PointCloud<pcl::PointXYZRGB>::Ptr ptrCloud(cloud);
 		pcl::PointCloud<pcl::PointXYZRGB>::ConstPtr cptrCloud(ptrCloud);
 		pcl::fromROSMsg(*input, *cloud);
-
+		
 		////////////////////////////////////////////////////
 		// Voxel filtering
 		////////////////////////////////////////////////////
@@ -97,8 +99,35 @@ void cloud_cb(const sensor_msgs::PointCloud2ConstPtr & input)
 		// HSV segmentation
 		////////////////////////////////////////////////////
 		auto tic_hsv = std::chrono::high_resolution_clock::now();
+
 		pcl::PointCloud<pcl::PointXYZHSV> * ptrCloudHSV = new (pcl::PointCloud<pcl::PointXYZHSV>); 
-		pcl::PointCloudXYZRGBtoXYZHSV(*voxelFiltered, *ptrCloudHSV);
+		//pcl::PointCloudXYZRGBtoXYZHSV(*voxelFiltered, *ptrCloudHSV);
+		for (size_t i = 0; i < voxelFiltered->size(); i++)
+		{
+			pcl::PointXYZHSV p;
+			pcl::PointXYZRGBtoXYZHSV(voxelFiltered->points[i], p);	
+			p.x = voxelFiltered->points[i].x;
+			p.y = voxelFiltered->points[i].y;
+			p.z = voxelFiltered->points[i].z;
+			std::cout << "HSV: h=" << p.h << "; s=" << p.s << "; v=" << p.v << std::endl;
+			if ((180 <= p.h && p.h <= 200) &&
+						(0 <= p.s && p.s <= 255) &&
+							(0 <= p.v && p.v <= 255))
+			{
+				ptrCloudHSV->push_back(p);
+			}
+		}
+
+		pcl::PointCloud<pcl::PointXYZRGB> * displayHSV = new (pcl::PointCloud<pcl::PointXYZRGB>);
+		for (size_t i = 0; i < ptrCloudHSV->size(); i++)
+		{
+			pcl::PointXYZRGB p;
+			pcl::PointXYZHSVtoXYZRGB(ptrCloudHSV->points[i], p);	
+			p.x = ptrCloudHSV->points[i].x;
+			p.y = ptrCloudHSV->points[i].y;
+			p.z = ptrCloudHSV->points[i].z;
+			displayHSV->push_back(p);
+		}	
 
 		auto toc_hsv = std::chrono::high_resolution_clock::now();
 		std::chrono::duration<double, std::milli> dur_hsv_ms = toc_hsv - tic_hsv; 
@@ -129,10 +158,10 @@ void cloud_cb(const sensor_msgs::PointCloud2ConstPtr & input)
 		static int loop_cpd = 0;
 		loop_cpd++;
 		if (OUTPUT_DEBUG_INFO == true)
-		std::cout << "Current loop of CPD >>> " << loop_cpd << std::endl;
+			std::cout << "CPD looping ... " << loop_cpd << std::endl;
 		if (loop_cpd == 1)
 		{
-			std::cout << "Initial the loop_cpd ... " << std::endl;
+			std::cout << "Initialze CPD ... " << std::endl;
 			//// Genreate a line
 			//for (size_t i = 0; i < gen_pointset.rows(); i++)
 			//{
@@ -188,11 +217,10 @@ void cloud_cb(const sensor_msgs::PointCloud2ConstPtr & input)
 			std::cout << "CPD duration(ms) >>> " << dur_cpd_ms.count() << std::endl;
 
 		////////////////////////////////////////////////////
-		// Translate Eigen::MatrixXf to PointXYZRGB
+		// Convert Eigen::MatrixXf to PointXYZRGB
 		////////////////////////////////////////////////////
 		pcl::PointCloud<pcl::PointXYZRGB> * pointsDisplay = new (pcl::PointCloud<pcl::PointXYZRGB>);
 		pcl::PointXYZRGB p;
-		sensor_msgs::PointCloud2 output;
 
 		for (size_t i = 0; i < colorFiltered->size(); i++)
 		{
@@ -222,46 +250,116 @@ void cloud_cb(const sensor_msgs::PointCloud2ConstPtr & input)
 			pointsDisplay->push_back(p);
 		}
 
-		//static bool getPCL = false;
-		//static int getPCLCount = 0;
-		//getPCLCount++;
-		//if (getPCL == false && getPCLCount == 100)
-		//{
-			//getPCL = true;
-			//pcl::PointCloud<pcl::PointXYZ> cloud1;
-			//std::cout << "Copy data finish ..." << std::endl;
-			//pcl::copyPointCloud(*colorFiltered, cloud1);
-			//std::cout << "Start to writing .PCD >>> " << std::endl;
-			//pcl::io::savePCDFileASCII("/home/yili/Documents/workspace/cpd/pcl_matching/data/biwi_face_database/cable.pcd", cloud1);
-		//}
-
+		////////////////////////////////////////////////////
 		// Convert pcl::PCLPointCloud2 to pcl::PointCloud<T>
-		// Output the color-based filtered
-		//pcl::toROSMsg(*colorFiltered, output);
-		// Output the down-sampling result
-		//pcl::toROSMsg(*voxelFiltered, output);
-		// Output the registration result
-		pcl::toROSMsg(*pointsDisplay, output);
+		////////////////////////////////////////////////////
+		pcl::PointCloud<pcl::PointXYZRGB> * displayCloud = new (pcl::PointCloud<pcl::PointXYZRGB>);
+		sensor_msgs::PointCloud2 output;
+		switch (DISPLAY_SELECT)
+		{
+			case 1: displayCloud = pointsDisplay; break;
+			case 2: displayCloud = displayHSV; break;
+			default: break;
+		}
+		//pcl::toROSMsg(*pointsDisplay, output);
+		pcl::toROSMsg(*displayCloud, output);
 		output.header.stamp = ros::Time::now();
 		output.header.frame_id = "camera_rgb_optical_frame";
 		pub.publish(output);
 	}
 }
 
-int main(int argc, char** argv)
+void cloud_cb_test(const sensor_msgs::PointCloud2ConstPtr & input)
+{
+	cb_count++;
+	if (OUTPUT_DEBUG_INFO == true)
+		std::cout << "cb_count = " << cb_count << std::endl;
+
+	if (cb_count == int(FRAME_BASE)/int(DESTINATION_RATE))
+	{
+		cb_count = 0;
+
+		////////////////////////////////////////////////////
+		// Convert pcl::PCLPointCloud2 to pcl::PointCloud<T>
+		////////////////////////////////////////////////////
+		pcl::PointCloud<pcl::PointXYZRGB> * cloud = new pcl::PointCloud<pcl::PointXYZRGB>;
+		pcl::PointCloud<pcl::PointXYZRGB>::Ptr ptrCloud(cloud);
+		pcl::PointCloud<pcl::PointXYZRGB>::ConstPtr cptrCloud(ptrCloud);
+		pcl::fromROSMsg(*input, *cloud);
+		
+		////////////////////////////////////////////////////
+		// HSV segmentation
+		////////////////////////////////////////////////////
+		auto tic_hsv = std::chrono::high_resolution_clock::now();
+
+		pcl::PointCloud<pcl::PointXYZHSV> * ptrCloudHSV = new (pcl::PointCloud<pcl::PointXYZHSV>); 
+		//pcl::PointCloudXYZRGBtoXYZHSV(*voxelFiltered, *ptrCloudHSV);
+		for (size_t i = 0; i < cloud->size(); i++)
+		{
+			pcl::PointXYZHSV p;
+			pcl::PointXYZRGBtoXYZHSV(cloud->points[i], p);	
+			p.x = cloud->points[i].x;
+			p.y = cloud->points[i].y;
+			p.z = cloud->points[i].z;
+			//std::cout << "HSV: h=" << p.h << "; s=" << p.s << "; v=" << p.v << std::endl;
+			if ((0 <= p.h && p.h <= 10 || (250 <= p.h && p.h <= 340)) &&
+						(0.3 <= p.s && p.s <= 0.8) &&
+							(0.35 <= p.v && p.v <= 0.85))
+			{
+				ptrCloudHSV->push_back(p);
+			}
+		}
+
+		auto toc_hsv = std::chrono::high_resolution_clock::now();
+		std::chrono::duration<double, std::milli> dur_hsv_ms = toc_hsv - tic_hsv; 
+		if (OUTPUT_TIME_INFO == true)
+			std::cout << "HSV segmentation duration(ms) >>> " << dur_hsv_ms.count() << std::endl;
+
+		pcl::PointCloud<pcl::PointXYZRGB> * displayHSV = new (pcl::PointCloud<pcl::PointXYZRGB>);
+		for (size_t i = 0; i < ptrCloudHSV->size(); i++)
+		{
+			pcl::PointXYZRGB p;
+			pcl::PointXYZHSVtoXYZRGB(ptrCloudHSV->points[i], p);	
+			p.x = ptrCloudHSV->points[i].x;
+			p.y = ptrCloudHSV->points[i].y;
+			p.z = ptrCloudHSV->points[i].z;
+			displayHSV->push_back(p);
+		}	
+
+		////////////////////////////////////////////////////
+		// Convert pcl::PCLPointCloud2 to pcl::PointCloud<T>
+		////////////////////////////////////////////////////
+		pcl::PointCloud<pcl::PointXYZRGB> * displayCloud = new (pcl::PointCloud<pcl::PointXYZRGB>);
+		sensor_msgs::PointCloud2 output;
+		switch (DISPLAY_SELECT)
+		{
+			//case 1: displayCloud = pointsDisplay; break;
+			case 2: displayCloud = displayHSV; break;
+			default: break;
+		}
+		//pcl::toROSMsg(*pointsDisplay, output);
+		pcl::toROSMsg(*displayCloud, output);
+		output.header.stamp = ros::Time::now();
+		output.header.frame_id = "camera_rgb_optical_frame";
+		pub.publish(output);
+
+	}
+}
+
+int main(int argc, char * argv[])
 {
 	// Successfully run
-	std::cout << "Start ...  " << std::endl;
+	std::cout << "PCL Version: " << PCL_VERSION << std::endl;
 	std::cout << "CPD Version: " << cpd::version() << std::endl; 
+	std::cout << "Start tracking ...  " << std::endl;
 
-	// Initial ROS
+	// Initialize ROS
 	ros::init(argc, argv, "do_tracking");
 	ros::NodeHandle nh;
 
-	// Create a ROS subscriber for the input depth data
-	ros::Subscriber sub = nh.subscribe("input", 1, cloud_cb);
-	
-	// Create a ROS publisher
+	// Create ROS subscriber & publisher 
+	//ros::Subscriber sub = nh.subscribe("input", 1, cloud_cb);
+	ros::Subscriber sub = nh.subscribe("input", 1, cloud_cb_test);
 	pub = nh.advertise<sensor_msgs::PointCloud2>("output", 1);
 
 	// Spin
