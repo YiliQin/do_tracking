@@ -23,7 +23,8 @@
 #define DESTINATION_RATE 15
 #define OUTPUT_TIME_INFO true
 #define OUTPUT_DEBUG_INFO false
-#define DISPLAY_SELECT 1
+#define DISPLAY_SELECT 2
+#define COLOR_FILTER_SEL 1
 
 ros::Publisher pub;
 int cb_count = 0;
@@ -299,15 +300,15 @@ pcl::PointCloud<pcl::PointXYZRGB> * voxel_filter(pcl::PointCloud<pcl::PointXYZRG
 	return ptrCloudVoxel;
 }
 
-/*  Color based filter.
+/*  HSV - Color based filter.
  *
  */
-pcl::PointCloud<pcl::PointXYZRGB> * color_filter(pcl::PointCloud<pcl::PointXYZRGB> & cloud)
+pcl::PointCloud<pcl::PointXYZRGB> * colorHSV_filter(pcl::PointCloud<pcl::PointXYZRGB> & cloud)
 {
+	pcl::PointCloud<pcl::PointXYZHSV> * ptrCloudHSV = new (pcl::PointCloud<pcl::PointXYZHSV>); 
 
 	auto tic_hsv = std::chrono::high_resolution_clock::now();
 
-	pcl::PointCloud<pcl::PointXYZHSV> * ptrCloudHSV = new (pcl::PointCloud<pcl::PointXYZHSV>); 
 	for (size_t i = 0; i < cloud.size(); i++)
 	{
 		pcl::PointXYZHSV p;
@@ -342,6 +343,42 @@ pcl::PointCloud<pcl::PointXYZRGB> * color_filter(pcl::PointCloud<pcl::PointXYZRG
 	
 	return ptrCloudRGB;
 }	
+
+/*  RGB - Color based filter.
+ *
+ */
+pcl::PointCloud<pcl::PointXYZRGB> * colorRGB_filter(pcl::PointCloud<pcl::PointXYZRGB> & cloud)
+{
+		pcl::PointCloud<pcl::PointXYZRGB> * ptrColorFilter = new pcl::PointCloud<pcl::PointXYZRGB>;
+		int count = 0;
+
+		auto tic_seg = std::chrono::high_resolution_clock::now();
+
+		for (size_t i = 0; i < cloud.size(); i++)
+		{
+			// For cable
+			//if cloud.points[i].r < 80 && cloud.points[i].g < 80 && cloud.points[i].b > 120)
+			// For paper
+			//if (cloud.points[i].r < 40 && cloud.points[i].g < 40 && cloud.points[i].b > 60)
+			// For nappe
+			if ((100 <= cloud.points[i].r && cloud.points[i].r <= 255) &&
+						(0 <= cloud.points[i].g && cloud.points[i].g <= 100) && 
+							(0 <= cloud.points[i].b && cloud.points[i].b <= 100))
+			{
+				ptrColorFilter->push_back(cloud.points[i]);
+				count++;
+			}
+		}
+		if (OUTPUT_DEBUG_INFO == true)
+			std::cout << "RGB color filter: Numbers of points >>> " << count << std::endl;
+
+		auto toc_seg = std::chrono::high_resolution_clock::now();
+		std::chrono::duration<double, std::milli> dur_seg_ms = toc_seg - tic_seg; 
+		if (OUTPUT_TIME_INFO == true)
+			std::cout << "RGB segmentation duration(ms) >>> " << dur_seg_ms.count() << std::endl;
+
+		return ptrColorFilter;
+}
 
 /* CPD matching.
  *
@@ -483,13 +520,16 @@ void cloud_cb_test(const sensor_msgs::PointCloud2ConstPtr & input)
 
 		// Voxel filter
 		pcl::PointCloud<pcl::PointXYZRGB> * ptrVoxelFilter = new pcl::PointCloud<pcl::PointXYZRGB>;
-		//ptrVoxelFilter = voxel_filter(*ptrColorFilter);
 		ptrVoxelFilter = voxel_filter(*ptrCloudRGB);
 
 		// Color filter
 		pcl::PointCloud<pcl::PointXYZRGB> * ptrColorFilter = new (pcl::PointCloud<pcl::PointXYZRGB>);
-		//ptrColorFilter = color_filter(*ptrCloudRGB);
-		ptrColorFilter = color_filter(*ptrVoxelFilter);
+		switch (COLOR_FILTER_SEL)
+		{
+			case 1:	ptrColorFilter = colorHSV_filter(*ptrVoxelFilter); break;
+			case 2: ptrColorFilter = colorRGB_filter(*ptrVoxelFilter); break;
+			default: break;
+		}
 		
 		// CPD matching
 		pcl::PointCloud<pcl::PointXYZRGB> * ptrColorCPD= new (pcl::PointCloud<pcl::PointXYZRGB>);
@@ -526,7 +566,6 @@ int main(int argc, char * argv[])
 	ros::NodeHandle nh;
 
 	// Create ROS subscriber & publisher 
-	//ros::Subscriber sub = nh.subscribe("input", 1, cloud_cb);
 	ros::Subscriber sub = nh.subscribe("input", 1, cloud_cb_test);
 	pub = nh.advertise<sensor_msgs::PointCloud2>("output", 1);
 
