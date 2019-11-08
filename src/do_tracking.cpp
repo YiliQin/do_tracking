@@ -23,7 +23,7 @@
 #define DESTINATION_RATE 15
 #define OUTPUT_TIME_INFO true
 #define OUTPUT_DEBUG_INFO false
-#define DISPLAY_SELECT 2
+#define DISPLAY_SELECT 1
 
 ros::Publisher pub;
 int cb_count = 0;
@@ -269,6 +269,204 @@ void cloud_cb(const sensor_msgs::PointCloud2ConstPtr & input)
 	}
 }
 
+/*  Voxel filter.
+ *
+ */
+pcl::PointCloud<pcl::PointXYZRGB> * voxel_filter(pcl::PointCloud<pcl::PointXYZRGB> & cloud)
+{
+	pcl::VoxelGrid<pcl::PointXYZRGB> vg;
+	pcl::PointCloud<pcl::PointXYZRGB>::Ptr ptrTmp(&cloud);
+	pcl::PointCloud<pcl::PointXYZRGB>::ConstPtr cptrCloud(ptrTmp);
+	pcl::PointCloud<pcl::PointXYZRGB> * ptrCloudVoxel = new (pcl::PointCloud<pcl::PointXYZRGB>);
+
+	auto tic_voxel = std::chrono::high_resolution_clock::now();
+
+	vg.setInputCloud(cptrCloud);
+	// For cable
+	//ds.setLeafSize(0.01, 0.01, 0.01);
+	// For paper
+	vg.setLeafSize(0.02, 0.02, 0.02);
+	// For nappe
+	vg.setLeafSize(0.02, 0.02, 0.02);
+	vg.filter(*ptrCloudVoxel);
+
+	auto toc_voxel = std::chrono::high_resolution_clock::now();
+	std::chrono::microseconds dur_ms;
+	std::chrono::duration<double, std::milli> dur_voxel_ms = toc_voxel - tic_voxel; 
+	if (OUTPUT_TIME_INFO == true)
+			std::cout << "Voxel filtering duration(ms) >>> " << dur_voxel_ms.count() << std::endl;
+
+	return ptrCloudVoxel;
+}
+
+/*  Color based filter.
+ *
+ */
+pcl::PointCloud<pcl::PointXYZRGB> * color_filter(pcl::PointCloud<pcl::PointXYZRGB> & cloud)
+{
+
+	auto tic_hsv = std::chrono::high_resolution_clock::now();
+
+	pcl::PointCloud<pcl::PointXYZHSV> * ptrCloudHSV = new (pcl::PointCloud<pcl::PointXYZHSV>); 
+	for (size_t i = 0; i < cloud.size(); i++)
+	{
+		pcl::PointXYZHSV p;
+		pcl::PointXYZRGBtoXYZHSV(cloud.points[i], p);	
+		p.x = cloud.points[i].x;
+		p.y = cloud.points[i].y;
+		p.z = cloud.points[i].z;
+		//std::cout << "HSV: h=" << p.h << "; s=" << p.s << "; v=" << p.v << std::endl;
+		if ((0 <= p.h && p.h <= 10 || (250 <= p.h && p.h <= 340)) &&
+					(0.3 <= p.s && p.s <= 0.8) &&
+						(0.35 <= p.v && p.v <= 0.85))
+		{
+			ptrCloudHSV->push_back(p);
+		}
+	}
+
+	pcl::PointCloud<pcl::PointXYZRGB> * ptrCloudRGB = new (pcl::PointCloud<pcl::PointXYZRGB>);
+		for (size_t i = 0; i < ptrCloudHSV->size(); i++)
+		{
+			pcl::PointXYZRGB p;
+			pcl::PointXYZHSVtoXYZRGB(ptrCloudHSV->points[i], p);	
+			p.x = ptrCloudHSV->points[i].x;
+			p.y = ptrCloudHSV->points[i].y;
+			p.z = ptrCloudHSV->points[i].z;
+			ptrCloudRGB->push_back(p);
+		}
+
+	auto toc_hsv = std::chrono::high_resolution_clock::now();
+	std::chrono::duration<double, std::milli> dur_hsv_ms = toc_hsv - tic_hsv; 
+	if (OUTPUT_TIME_INFO == true)
+		std::cout << "HSV segmentation duration(ms) >>> " << dur_hsv_ms.count() << std::endl;
+	
+	return ptrCloudRGB;
+}	
+
+/* CPD matching.
+ *
+ */
+pcl::PointCloud<pcl::PointXYZRGB> * cpd_matching(pcl::PointCloud<pcl::PointXYZRGB> & cloud)
+{
+	////////////////////////////////////////////////////
+	// pcl::PointXYZRGB -> Eigen::MatrixXd
+	////////////////////////////////////////////////////
+	size_t nrows = cloud.size();
+	size_t ncols = 3;
+	if (OUTPUT_DEBUG_INFO == true)
+		std::cout << "Fixed point cloud size (dataFixed) >>> " << nrows << std::endl;
+	Eigen::MatrixXd dataFixed(nrows, ncols);
+	for (size_t i = 0; i < nrows; i++)
+	{
+		dataFixed(i, 0) = (double)cloud.points[i].x;
+		dataFixed(i, 1) = (double)cloud.points[i].y;
+		dataFixed(i, 2) = (double)cloud.points[i].z;
+	}
+
+	////////////////////////////////////////////////////
+	// CPD registration
+	////////////////////////////////////////////////////
+	auto tic_cpd = std::chrono::high_resolution_clock::now();
+	// Generate the point set
+	static Eigen::MatrixXd gen_pointset(15, 3);
+	static int loop_cpd = 0;
+	loop_cpd++;
+	if (OUTPUT_DEBUG_INFO == true)
+		std::cout << "CPD looping ... " << loop_cpd << std::endl;
+	if (loop_cpd == 1)
+	{
+		std::cout << "Initialze CPD ... " << std::endl;
+		//// Genreate a line
+		//for (size_t i = 0; i < gen_pointset.rows(); i++)
+		//{
+			//double u = (double)(i);
+			//gen_pointset(i, 0) = (u / 10);
+			//gen_pointset(i, 1) = (u / 10);
+			//gen_pointset(i, 2) = (u / 10);
+		//}
+
+		// Genreate a plane
+		int index = 0;
+		for (size_t i = 0; i < gen_pointset.rows()/3; i++)
+		{
+			gen_pointset(index + i, 0) = ((double)(i))/2;
+			//gen_pointset(index + i, 1) = ((double)(i))/3;
+			//gen_pointset(index + i, 2) = ((double)(i))/3;
+			gen_pointset(index + i, 1) = 0.5;
+			gen_pointset(index + i, 2) = 0.0;
+		}
+		index = gen_pointset.rows()/3;
+		for (size_t i = 0; i < gen_pointset.rows()/3; i++)
+		{
+			//gen_pointset(index + i, 0) = ((double)(i))/3 + 0.5;
+			gen_pointset(index + i, 0) = ((double)(i))/2;
+			//gen_pointset(index + i, 1) = ((double)(i))/3;
+			//gen_pointset(index + i, 2) = ((double)(i))/3;
+			gen_pointset(index + i, 1) = 0.0;
+			gen_pointset(index + i, 2) = 0.0;
+		}
+		index = 2 * gen_pointset.rows() / 3;
+		for (size_t i = 0; i < gen_pointset.rows()/3; i++)
+		{
+			//gen_pointset(index + i, 0) = ((double)(i))/3 - 0.5;
+			gen_pointset(index + i, 0) = ((double)(i))/2;
+			//gen_pointset(index + i, 1) = ((double)(i))/3;
+			//gen_pointset(index + i, 2) = ((double)(i))/3;
+			gen_pointset(index + i, 1) = -0.5;
+			gen_pointset(index + i, 2) = 0.0;
+		}
+	}
+	else 
+	{
+		cpd::Nonrigid nonrigid;
+		nonrigid.correspondence("true");
+		nonrigid.outliers(0.1);
+		nonrigid.tolerance(1e-5);
+		cpd::NonrigidResult result = nonrigid.run(dataFixed, gen_pointset);
+		gen_pointset = result.points;
+	}
+	auto toc_cpd = std::chrono::high_resolution_clock::now();
+	std::chrono::duration<double, std::milli> dur_cpd_ms = toc_cpd - tic_cpd;
+	if (OUTPUT_TIME_INFO == true)
+		std::cout << "CPD duration(ms) >>> " << dur_cpd_ms.count() << std::endl;
+
+	////////////////////////////////////////////////////
+	// Convert Eigen::MatrixXf to PointXYZRGB
+	////////////////////////////////////////////////////
+	pcl::PointCloud<pcl::PointXYZRGB> * pointsDisplay = new (pcl::PointCloud<pcl::PointXYZRGB>);
+	pcl::PointXYZRGB p;
+
+	for (size_t i = 0; i < cloud.size(); i++)
+	{
+		p.x = cloud.points[i].x;
+		p.y = cloud.points[i].y;
+		p.z = cloud.points[i].z;
+		p.r = 0;
+		p.g = 0;
+		p.b = 255;
+
+		pointsDisplay->push_back(p);
+	}
+
+	for (size_t i = 0; i < gen_pointset.rows(); i++)
+	{
+		// Generate the point cloud
+		p.x = gen_pointset(i, 0);
+		p.y = gen_pointset(i, 1);
+		p.z = gen_pointset(i, 2);
+
+		// Generate the point cloud
+		p.r = 255;
+		p.g = 0;
+		p.b = 0;
+
+		// Push the generated point
+		pointsDisplay->push_back(p);
+	}
+
+	return pointsDisplay;
+}
+
 void cloud_cb_test(const sensor_msgs::PointCloud2ConstPtr & input)
 {
 	cb_count++;
@@ -279,62 +477,32 @@ void cloud_cb_test(const sensor_msgs::PointCloud2ConstPtr & input)
 	{
 		cb_count = 0;
 
-		////////////////////////////////////////////////////
 		// Convert pcl::PCLPointCloud2 to pcl::PointCloud<T>
-		////////////////////////////////////////////////////
-		pcl::PointCloud<pcl::PointXYZRGB> * cloud = new pcl::PointCloud<pcl::PointXYZRGB>;
-		pcl::PointCloud<pcl::PointXYZRGB>::Ptr ptrCloud(cloud);
-		pcl::PointCloud<pcl::PointXYZRGB>::ConstPtr cptrCloud(ptrCloud);
-		pcl::fromROSMsg(*input, *cloud);
+		pcl::PointCloud<pcl::PointXYZRGB> * ptrCloudRGB = new pcl::PointCloud<pcl::PointXYZRGB>;
+		pcl::fromROSMsg(*input, *ptrCloudRGB);
+
+		// Voxel filter
+		pcl::PointCloud<pcl::PointXYZRGB> * ptrVoxelFilter = new pcl::PointCloud<pcl::PointXYZRGB>;
+		//ptrVoxelFilter = voxel_filter(*ptrColorFilter);
+		ptrVoxelFilter = voxel_filter(*ptrCloudRGB);
+
+		// Color filter
+		pcl::PointCloud<pcl::PointXYZRGB> * ptrColorFilter = new (pcl::PointCloud<pcl::PointXYZRGB>);
+		//ptrColorFilter = color_filter(*ptrCloudRGB);
+		ptrColorFilter = color_filter(*ptrVoxelFilter);
 		
-		////////////////////////////////////////////////////
-		// HSV segmentation
-		////////////////////////////////////////////////////
-		auto tic_hsv = std::chrono::high_resolution_clock::now();
-
-		pcl::PointCloud<pcl::PointXYZHSV> * ptrCloudHSV = new (pcl::PointCloud<pcl::PointXYZHSV>); 
-		//pcl::PointCloudXYZRGBtoXYZHSV(*voxelFiltered, *ptrCloudHSV);
-		for (size_t i = 0; i < cloud->size(); i++)
-		{
-			pcl::PointXYZHSV p;
-			pcl::PointXYZRGBtoXYZHSV(cloud->points[i], p);	
-			p.x = cloud->points[i].x;
-			p.y = cloud->points[i].y;
-			p.z = cloud->points[i].z;
-			//std::cout << "HSV: h=" << p.h << "; s=" << p.s << "; v=" << p.v << std::endl;
-			if ((0 <= p.h && p.h <= 10 || (250 <= p.h && p.h <= 340)) &&
-						(0.3 <= p.s && p.s <= 0.8) &&
-							(0.35 <= p.v && p.v <= 0.85))
-			{
-				ptrCloudHSV->push_back(p);
-			}
-		}
-
-		auto toc_hsv = std::chrono::high_resolution_clock::now();
-		std::chrono::duration<double, std::milli> dur_hsv_ms = toc_hsv - tic_hsv; 
-		if (OUTPUT_TIME_INFO == true)
-			std::cout << "HSV segmentation duration(ms) >>> " << dur_hsv_ms.count() << std::endl;
-
-		pcl::PointCloud<pcl::PointXYZRGB> * displayHSV = new (pcl::PointCloud<pcl::PointXYZRGB>);
-		for (size_t i = 0; i < ptrCloudHSV->size(); i++)
-		{
-			pcl::PointXYZRGB p;
-			pcl::PointXYZHSVtoXYZRGB(ptrCloudHSV->points[i], p);	
-			p.x = ptrCloudHSV->points[i].x;
-			p.y = ptrCloudHSV->points[i].y;
-			p.z = ptrCloudHSV->points[i].z;
-			displayHSV->push_back(p);
-		}	
-
-		////////////////////////////////////////////////////
+		// CPD matching
+		pcl::PointCloud<pcl::PointXYZRGB> * ptrColorCPD= new (pcl::PointCloud<pcl::PointXYZRGB>);
+		ptrColorCPD = cpd_matching(*ptrColorFilter);
+		
 		// Convert pcl::PCLPointCloud2 to pcl::PointCloud<T>
-		////////////////////////////////////////////////////
 		pcl::PointCloud<pcl::PointXYZRGB> * displayCloud = new (pcl::PointCloud<pcl::PointXYZRGB>);
 		sensor_msgs::PointCloud2 output;
 		switch (DISPLAY_SELECT)
 		{
-			//case 1: displayCloud = pointsDisplay; break;
-			case 2: displayCloud = displayHSV; break;
+			case 1: displayCloud = ptrColorCPD; break;
+			case 2: displayCloud = ptrColorFilter; break;
+			case 3: displayCloud = ptrVoxelFilter; break;
 			default: break;
 		}
 		//pcl::toROSMsg(*pointsDisplay, output);
