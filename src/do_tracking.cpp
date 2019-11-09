@@ -42,7 +42,7 @@
 #define COLOR_FILTER_SEL 1
 
 ros::Publisher pub;
-int cb_count = 0;
+int cntRun = 0;
 
 /*  Voxel filter.
  *
@@ -62,7 +62,8 @@ pcl::PointCloud<pcl::PointXYZRGB> * voxel_filter(pcl::PointCloud<pcl::PointXYZRG
 	// For paper
 	vg.setLeafSize(0.02, 0.02, 0.02);
 	// For nappe
-	vg.setLeafSize(0.02, 0.02, 0.02);
+	//vg.setLeafSize(0.02, 0.02, 0.02);
+	vg.setLeafSize(0.04, 0.04, 0.04);
 	vg.filter(*ptrCloudVoxel);
 
 	auto toc_voxel = std::chrono::high_resolution_clock::now();
@@ -173,10 +174,8 @@ pcl::PointCloud<pcl::PointXYZRGB> * cpd_matching(pcl::PointCloud<pcl::PointXYZRG
 		dataFixed(i, 2) = (double)cloud.points[i].z;
 	}
 
-	// CPD registration
-	auto tic_cpd = std::chrono::high_resolution_clock::now();
 	// Generate the point set
-	static Eigen::MatrixXd gen_pointset(15, 3);
+	static Eigen::MatrixXd gen_pointset(120, 3);
 	static int loop_cpd = 0;
 	loop_cpd++;
 	if (OUTPUT_DEBUG_INFO == true)
@@ -195,49 +194,82 @@ pcl::PointCloud<pcl::PointXYZRGB> * cpd_matching(pcl::PointCloud<pcl::PointXYZRG
 
 		// Genreate a plane
 		int index = 0;
-		for (size_t i = 0; i < gen_pointset.rows()/3; i++)
+		for (size_t i = 0; i < gen_pointset.rows()/6; i++)
 		{
-			gen_pointset(index + i, 0) = ((double)(i))/2;
+			gen_pointset(index + i, 0) = ((double)(i))/20;
 			//gen_pointset(index + i, 1) = ((double)(i))/3;
 			//gen_pointset(index + i, 2) = ((double)(i))/3;
-			gen_pointset(index + i, 1) = 0.5;
+			gen_pointset(index + i, 1) = 0.05;
 			gen_pointset(index + i, 2) = 0.0;
 		}
-		index = gen_pointset.rows()/3;
-		for (size_t i = 0; i < gen_pointset.rows()/3; i++)
+		index = gen_pointset.rows() / 6;
+		for (size_t i = 0; i < gen_pointset.rows()/6; i++)
 		{
 			//gen_pointset(index + i, 0) = ((double)(i))/3 + 0.5;
-			gen_pointset(index + i, 0) = ((double)(i))/2;
+			gen_pointset(index + i, 0) = ((double)(i))/20;
 			//gen_pointset(index + i, 1) = ((double)(i))/3;
 			//gen_pointset(index + i, 2) = ((double)(i))/3;
 			gen_pointset(index + i, 1) = 0.0;
 			gen_pointset(index + i, 2) = 0.0;
 		}
-		index = 2 * gen_pointset.rows() / 3;
-		for (size_t i = 0; i < gen_pointset.rows()/3; i++)
+		index = 2 * gen_pointset.rows() / 6;
+		for (size_t i = 0; i < gen_pointset.rows()/6; i++)
 		{
 			//gen_pointset(index + i, 0) = ((double)(i))/3 - 0.5;
-			gen_pointset(index + i, 0) = ((double)(i))/2;
+			gen_pointset(index + i, 0) = ((double)(i))/20;
 			//gen_pointset(index + i, 1) = ((double)(i))/3;
 			//gen_pointset(index + i, 2) = ((double)(i))/3;
-			gen_pointset(index + i, 1) = -0.5;
+			gen_pointset(index + i, 1) = -0.05;
+			gen_pointset(index + i, 2) = 0.0;
+		}
+    index = 3 * gen_pointset.rows() / 6;
+		for (size_t i = 0; i < gen_pointset.rows()/6; i++)
+		{
+			//gen_pointset(index + i, 0) = ((double)(i))/3 - 0.5;
+			gen_pointset(index + i, 0) = ((double)(i))/20;
+			//gen_pointset(index + i, 1) = ((double)(i))/3;
+			//gen_pointset(index + i, 2) = ((double)(i))/3;
+			gen_pointset(index + i, 1) = -0.10;
+			gen_pointset(index + i, 2) = 0.0;
+		}
+    index = 4 * gen_pointset.rows() / 6;
+		for (size_t i = 0; i < gen_pointset.rows()/6; i++)
+		{
+			//gen_pointset(index + i, 0) = ((double)(i))/3 - 0.5;
+			gen_pointset(index + i, 0) = ((double)(i))/20;
+			//gen_pointset(index + i, 1) = ((double)(i))/3;
+			//gen_pointset(index + i, 2) = ((double)(i))/3;
+			gen_pointset(index + i, 1) = -0.15;
+			gen_pointset(index + i, 2) = 0.0;
+		}
+    index = 5 * gen_pointset.rows() / 6;
+		for (size_t i = 0; i < gen_pointset.rows()/6; i++)
+		{
+			//gen_pointset(index + i, 0) = ((double)(i))/3 - 0.5;
+			gen_pointset(index + i, 0) = ((double)(i))/20;
+			//gen_pointset(index + i, 1) = ((double)(i))/3;
+			//gen_pointset(index + i, 2) = ((double)(i))/3;
+			gen_pointset(index + i, 1) = -0.20;
 			gen_pointset(index + i, 2) = 0.0;
 		}
 	}
 	else 
 	{
+    auto tic_cpd = std::chrono::high_resolution_clock::now();
+
 		cpd::Nonrigid nonrigid;
 		nonrigid.correspondence("true");
 		nonrigid.outliers(0.1);
 		nonrigid.tolerance(1e-5);
 		cpd::NonrigidResult result = nonrigid.run(dataFixed, gen_pointset);
 		gen_pointset = result.points;
-	}
-	auto toc_cpd = std::chrono::high_resolution_clock::now();
-	std::chrono::duration<double, std::milli> dur_cpd_ms = toc_cpd - tic_cpd;
-	if (OUTPUT_TIME_INFO == true)
-		std::cout << "CPD duration(ms) >>> " << dur_cpd_ms.count() << std::endl;
 
+    auto toc_cpd = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double, std::milli> dur_cpd_ms = toc_cpd - tic_cpd;
+    if (OUTPUT_TIME_INFO == true)
+      std::cout << "CPD duration(ms) >>> " << dur_cpd_ms.count() << std::endl;
+	}
+  
 	// Convert Eigen::MatrixXf to PointXYZRGB
 	pcl::PointCloud<pcl::PointXYZRGB> * pointsDisplay = new (pcl::PointCloud<pcl::PointXYZRGB>);
 	pcl::PointXYZRGB p;
@@ -262,10 +294,30 @@ pcl::PointCloud<pcl::PointXYZRGB> * cpd_matching(pcl::PointCloud<pcl::PointXYZRG
 		p.z = gen_pointset(i, 2);
 
 		// Generate the point cloud
-		p.r = 255;
-		p.g = 0;
-		p.b = 0;
-
+    if (i%20 == 0)
+    { 
+      p.r = 0;
+      p.g = 255;
+      p.b = 0;
+    }
+    else if (i%20 == 10)
+    { 
+      p.r = 0;
+      p.g = 255;
+      p.b = 255;
+    }
+    else if (i%20 == 19)
+    { 
+      p.r = 255;
+      p.g = 255;
+      p.b = 0;
+    }
+    else
+    {
+      p.r = 255;
+      p.g = 0;
+      p.b = 0;
+    }
 		// Push the generated point
 		pointsDisplay->push_back(p);
 	}
@@ -279,13 +331,13 @@ pcl::PointCloud<pcl::PointXYZRGB> * cpd_matching(pcl::PointCloud<pcl::PointXYZRG
 void do_tracking(const sensor_msgs::PointCloud2ConstPtr & input)
 
 {
-	cb_count++;
+	cntRun++;
 	if (OUTPUT_DEBUG_INFO == true)
-		std::cout << "cb_count = " << cb_count << std::endl;
+		std::cout << "Tracking ... " << cntRun << std::endl;
 
-	if (cb_count == int(FRAME_BASE)/int(DESTINATION_RATE))
+	if (cntRun == int(FRAME_BASE)/int(DESTINATION_RATE))
 	{
-		cb_count = 0;
+		cntRun = 0;
 
 		// Convert pcl::PCLPointCloud2 to pcl::PointCloud<T>
 		pcl::PointCloud<pcl::PointXYZRGB> * ptrCloudRGB = new pcl::PointCloud<pcl::PointXYZRGB>;
