@@ -4,6 +4,7 @@
 
 #include <ros/ros.h>
 #include <sensor_msgs/PointCloud2.h>
+#include <visualization_msgs/Marker.h>
 
 #include <pcl/pcl_config.h>
 #include <pcl/point_cloud.h>
@@ -28,12 +29,11 @@
 #define OUTPUT_TIME_INFO true
 #define OUTPUT_DEBUG_INFO false
 
-/* 1 - Matching result
- * 2 - Voxel filtering result
- * 3 - Color filtering result
+/* 1 - Voxel filtering result
+ * 2 - Color filtering result
  *
  */
-#define DISPLAY_SELECT 1
+#define DISPLAY_SELECT 2
 
 /* 1 - HSV filter
  * 2 - RGB filter
@@ -41,7 +41,10 @@
  */
 #define COLOR_FILTER_SEL 1
 
-ros::Publisher pub;
+ros::Publisher gen_set_pub;
+ros::Publisher cloud_pub;
+ros::Publisher marker_pub;
+
 int cntRun = 0;
 
 /*  Voxel filter.
@@ -274,18 +277,6 @@ pcl::PointCloud<pcl::PointXYZRGB> * cpd_matching(pcl::PointCloud<pcl::PointXYZRG
 	pcl::PointCloud<pcl::PointXYZRGB> * pointsDisplay = new (pcl::PointCloud<pcl::PointXYZRGB>);
 	pcl::PointXYZRGB p;
 
-	for (size_t i = 0; i < cloud.size(); i++)
-	{
-		p.x = cloud.points[i].x;
-		p.y = cloud.points[i].y;
-		p.z = cloud.points[i].z;
-		p.r = 0;
-		p.g = 0;
-		p.b = 255;
-
-		pointsDisplay->push_back(p);
-	}
-
 	for (size_t i = 0; i < gen_pointset.rows(); i++)
 	{
 		// Generate the point cloud
@@ -314,9 +305,9 @@ pcl::PointCloud<pcl::PointXYZRGB> * cpd_matching(pcl::PointCloud<pcl::PointXYZRG
     }
     else
     {
-      p.r = 255;
+      p.r = 0;
       p.g = 0;
-      p.b = 0;
+      p.b = 255;
     }
 		// Push the generated point
 		pointsDisplay->push_back(p);
@@ -331,6 +322,29 @@ pcl::PointCloud<pcl::PointXYZRGB> * cpd_matching(pcl::PointCloud<pcl::PointXYZRG
 void do_tracking(const sensor_msgs::PointCloud2ConstPtr & input)
 
 {
+  visualization_msgs::Marker line_list;
+  line_list.header.frame_id = "camera_rgb_optical_frame";
+  line_list.header.stamp = ros::Time::now();
+  line_list.ns = "points_and_lines";
+  //line_list.action = visualization_msgs::Marker::ADD;
+  line_list.pose.orientation.w = 1.0;
+  line_list.id = 2;
+  line_list.type = visualization_msgs::Marker::LINE_LIST;
+  line_list.scale.x = 0.002;
+  line_list.scale.y = 1;
+  line_list.scale.z = 1;
+  line_list.color.r = 1.0;
+  line_list.color.a = 1.0;
+  geometry_msgs::Point p;
+  p.x = 1.0;
+  p.y = 1.0;
+  p.z = 1.0;
+  line_list.points.push_back(p);
+  p.z = p.z + 1.0;
+  line_list.points.push_back(p);
+  std::cout << "Marker publish ..." << std::endl;
+  marker_pub.publish(line_list);
+
 	cntRun++;
 	if (OUTPUT_DEBUG_INFO == true)
 		std::cout << "Tracking ... " << cntRun << std::endl;
@@ -357,25 +371,31 @@ void do_tracking(const sensor_msgs::PointCloud2ConstPtr & input)
 		}
 		
 		// CPD matching
-		pcl::PointCloud<pcl::PointXYZRGB> * ptrColorCPD= new (pcl::PointCloud<pcl::PointXYZRGB>);
-		ptrColorCPD = cpd_matching(*ptrColorFilter);
+		pcl::PointCloud<pcl::PointXYZRGB> * ptrResultCPD= new (pcl::PointCloud<pcl::PointXYZRGB>);
+		ptrResultCPD = cpd_matching(*ptrColorFilter);
 		
 		// Convert pcl::PCLPointCloud2 to pcl::PointCloud<T>
 		pcl::PointCloud<pcl::PointXYZRGB> * displayCloud = new (pcl::PointCloud<pcl::PointXYZRGB>);
 		sensor_msgs::PointCloud2 output;
+
+    // Publish cloud
 		switch (DISPLAY_SELECT)
 		{
-			case 1: displayCloud = ptrColorCPD; break;
-			case 2: displayCloud = ptrVoxelFilter; break;
-			case 3: displayCloud = ptrColorFilter; break;
+			case 1: displayCloud = ptrVoxelFilter; break;
+			case 2: displayCloud = ptrColorFilter; break;
 			default: break;
 		}
-
-		// pcl::toROSMsg(*pointsDisplay, output);
 		pcl::toROSMsg(*displayCloud, output);
 		output.header.stamp = ros::Time::now();
 		output.header.frame_id = "camera_rgb_optical_frame";
-		pub.publish(output);
+		cloud_pub.publish(output);
+
+    // Publish CPD result
+    displayCloud = ptrResultCPD;
+    pcl::toROSMsg(*displayCloud, output);
+		output.header.stamp = ros::Time::now();
+		output.header.frame_id = "camera_rgb_optical_frame";
+    gen_set_pub.publish(output);
 	}
 }
 
@@ -392,7 +412,9 @@ int main(int argc, char * argv[])
 
 	// Create ROS subscriber & publisher 
 	ros::Subscriber sub = nh.subscribe("input", 1, do_tracking);
-	pub = nh.advertise<sensor_msgs::PointCloud2>("output", 1);
+	gen_set_pub = nh.advertise<sensor_msgs::PointCloud2>("matching_result", 1);
+	cloud_pub = nh.advertise<sensor_msgs::PointCloud2>("do_cloud", 1);
+  marker_pub = nh.advertise<visualization_msgs::Marker>("line_list", 10);
 
 	// Spin
 	ros::spin();
