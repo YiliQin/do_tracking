@@ -28,66 +28,15 @@ namespace gen_point_set
 		//}
 
 		// Genreate a plane
-
-    int index = 0;
-		for (size_t i = 0; i < pointSet.rows()/6; i++)
-		{
-			pointSet(index + i, 1) = ((double)(i))/20;
-			//pointSet(index + i, 1) = ((double)(i))/3;
-			//pointSet(index + i, 2) = ((double)(i))/3;
-			pointSet(index + i, 0) = 0.05;
-			pointSet(index + i, 2) = 0.0;
-		}
-		index = pointSet.rows() / 6;
-		for (size_t i = 0; i < pointSet.rows()/6; i++)
-		{
-			//pointSet(index + i, 0) = ((double)(i))/3 + 0.5;
-			pointSet(index + i, 1) = ((double)(i))/20;
-			//pointSet(index + i, 1) = ((double)(i))/3;
-			//pointSet(index + i, 2) = ((double)(i))/3;
-			pointSet(index + i, 0) = 0.0;
-			pointSet(index + i, 2) = 0.0;
-		}
-		index = 2 * pointSet.rows() / 6;
-		for (size_t i = 0; i < pointSet.rows()/6; i++)
-		{
-			//pointSet(index + i, 0) = ((double)(i))/3 - 0.5;
-			pointSet(index + i, 1) = ((double)(i))/20;
-			//pointSet(index + i, 1) = ((double)(i))/3;
-			//pointSet(index + i, 2) = ((double)(i))/3;
-			pointSet(index + i, 0) = -0.05;
-			pointSet(index + i, 2) = 0.0;
-		}
-    index = 3 * pointSet.rows() / 6;
-		for (size_t i = 0; i < pointSet.rows()/6; i++)
-		{
-			//pointSet(index + i, 0) = ((double)(i))/3 - 0.5;
-			pointSet(index + i, 1) = ((double)(i))/20;
-			//pointSet(index + i, 1) = ((double)(i))/3;
-			//pointSet(index + i, 2) = ((double)(i))/3;
-			pointSet(index + i, 0) = -0.10;
-			pointSet(index + i, 2) = 0.0;
-		}
-    index = 4 * pointSet.rows() / 6;
-		for (size_t i = 0; i < pointSet.rows()/6; i++)
-		{
-			//pointSet(index + i, 0) = ((double)(i))/3 - 0.5;
-			pointSet(index + i, 1) = ((double)(i))/20;
-			//pointSet(index + i, 1) = ((double)(i))/3;
-			//pointSet(index + i, 2) = ((double)(i))/3;
-			pointSet(index + i, 0) = -0.15;
-			pointSet(index + i, 2) = 0.0;
-		}
-    index = 5 * pointSet.rows() / 6;
-		for (size_t i = 0; i < pointSet.rows()/6; i++)
-		{
-			//pointSet(index + i, 0) = ((double)(i))/3 - 0.5;
-			pointSet(index + i, 1) = ((double)(i))/20;
-			//pointSet(index + i, 1) = ((double)(i))/3;
-			//pointSet(index + i, 2) = ((double)(i))/3;
-			pointSet(index + i, 0) = -0.20;
-			pointSet(index + i, 2) = 0.0;
-		}
+    for (size_t i = 0; i < p_num_row_; i++)
+    {
+      for (size_t j = 0; j < p_num_col_; j++)
+      {
+        pointSet(i * p_num_col_ + j, 0) = 0.05 * i;
+        pointSet(i * p_num_col_ + j, 1) = ((double)(j))/p_num_col_;
+        pointSet(i * p_num_col_ + j, 2) = 0.0;
+      } 
+    }
   } 
 
   Eigen::Vector3d PointSet::get_point()

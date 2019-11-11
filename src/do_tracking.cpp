@@ -30,7 +30,8 @@
 #define DESTINATION_RATE 15
 #define OUTPUT_TIME_INFO true
 #define OUTPUT_DEBUG_INFO false
-
+#define POINTS_PER_ROW 6
+#define POINTS_PER_COL 20
 /* 1 - Voxel filtering result
  * 2 - Color filtering result
  *
@@ -42,6 +43,7 @@
  *
  */
 #define COLOR_FILTER_SEL 1
+
 
 ros::Publisher gen_set_pub;
 ros::Publisher cloud_pub;
@@ -180,7 +182,7 @@ pcl::PointCloud<pcl::PointXYZRGB> * cpd_matching(pcl::PointCloud<pcl::PointXYZRG
 	}
 
 	// Generate the point set
-  static gen_point_set::PointSet gen_set(6, 20);
+  static gen_point_set::PointSet gen_set(POINTS_PER_ROW, POINTS_PER_COL);
 	static int loop_cpd = 0;
 	loop_cpd++;
 	if (OUTPUT_DEBUG_INFO == true)
@@ -198,9 +200,7 @@ pcl::PointCloud<pcl::PointXYZRGB> * cpd_matching(pcl::PointCloud<pcl::PointXYZRG
 		nonrigid.correspondence("true");
 		nonrigid.outliers(0.1);
 		nonrigid.tolerance(1e-5);
-		//cpd::NonrigidResult result = nonrigid.run(dataFixed, gen_pointset);
 		cpd::NonrigidResult result = nonrigid.run(dataFixed, gen_set.pointSet);
-		//gen_pointset = result.points;
 		gen_set.pointSet = result.points;
 
     auto toc_cpd = std::chrono::high_resolution_clock::now();
@@ -222,19 +222,19 @@ pcl::PointCloud<pcl::PointXYZRGB> * cpd_matching(pcl::PointCloud<pcl::PointXYZRG
 		p.z = gen_set.pointSet(i, 2);
 
 		// Generate the point cloud
-    if (i%20 == 0)
+    if (i%POINTS_PER_COL == 0)
     { 
       p.r = 0;
       p.g = 255;
       p.b = 0;
     }
-    else if (i%20 == 10)
+    else if (i%POINTS_PER_COL == 10)
     { 
       p.r = 0;
       p.g = 255;
       p.b = 255;
     }
-    else if (i%20 == 19)
+    else if (i%POINTS_PER_COL == 19)
     { 
       p.r = 255;
       p.g = 255;
@@ -259,34 +259,12 @@ pcl::PointCloud<pcl::PointXYZRGB> * cpd_matching(pcl::PointCloud<pcl::PointXYZRG
 void do_tracking(const sensor_msgs::PointCloud2ConstPtr & input)
 
 {
-  visualization_msgs::Marker line_list;
-  line_list.header.frame_id = "camera_rgb_optical_frame";
-  line_list.header.stamp = ros::Time::now();
-  line_list.ns = "points_and_lines";
-  //line_list.action = visualization_msgs::Marker::ADD;
-  line_list.pose.orientation.w = 1.0;
-  line_list.id = 2;
-  line_list.type = visualization_msgs::Marker::LINE_LIST;
-  line_list.scale.x = 0.002;
-  line_list.scale.y = 1;
-  line_list.scale.z = 1;
-  line_list.color.r = 1.0;
-  line_list.color.a = 1.0;
-  geometry_msgs::Point p;
-  p.x = 1.0;
-  p.y = 1.0;
-  p.z = 1.0;
-  line_list.points.push_back(p);
-  p.z = p.z + 1.0;
-  line_list.points.push_back(p);
-  std::cout << "Marker publish ..." << std::endl;
-  marker_pub.publish(line_list);
-
+  
 	cntRun++;
 	if (OUTPUT_DEBUG_INFO == true)
 		std::cout << "Tracking ... " << cntRun << std::endl;
 
-	if (cntRun == int(FRAME_BASE)/int(DESTINATION_RATE))
+	if (cntRun == FRAME_BASE / DESTINATION_RATE)
 	{
 		cntRun = 0;
 
@@ -308,7 +286,7 @@ void do_tracking(const sensor_msgs::PointCloud2ConstPtr & input)
 		}
 		
 		// CPD matching
-		pcl::PointCloud<pcl::PointXYZRGB> * ptrResultCPD= new (pcl::PointCloud<pcl::PointXYZRGB>);
+	  pcl::PointCloud<pcl::PointXYZRGB> * ptrResultCPD = new (pcl::PointCloud<pcl::PointXYZRGB>);
 		ptrResultCPD = cpd_matching(*ptrColorFilter);
 		
 		// Convert pcl::PCLPointCloud2 to pcl::PointCloud<T>
@@ -333,6 +311,51 @@ void do_tracking(const sensor_msgs::PointCloud2ConstPtr & input)
 		output.header.stamp = ros::Time::now();
 		output.header.frame_id = "camera_rgb_optical_frame";
     gen_set_pub.publish(output);
+
+    // Generate line markers and publish them
+    visualization_msgs::Marker line_list;
+    line_list.header.frame_id = "camera_rgb_optical_frame";
+    line_list.header.stamp = ros::Time::now();
+    line_list.ns = "points_and_lines";
+    line_list.action = visualization_msgs::Marker::ADD;
+    line_list.pose.orientation.w = 1.0;
+    line_list.id = 2;
+    line_list.type = visualization_msgs::Marker::LINE_LIST;
+    line_list.scale.x = 0.002;
+    line_list.color.r = 1.0;
+    line_list.color.a = 1.0;
+    geometry_msgs::Point p;
+    for (size_t i = 0; i < POINTS_PER_ROW; i++)
+    {
+      for (size_t j = 0; j < (POINTS_PER_COL - 1); j++)
+      {
+        int n = i * POINTS_PER_COL + j;
+        p.x = ptrResultCPD->points[n].x;  
+        p.y = ptrResultCPD->points[n].y;  
+        p.z = ptrResultCPD->points[n].z;  
+        line_list.points.push_back(p);
+        p.x = ptrResultCPD->points[n+1].x;  
+        p.y = ptrResultCPD->points[n+1].y;  
+        p.z = ptrResultCPD->points[n+1].z;  
+        line_list.points.push_back(p);
+      }
+    }
+    for (size_t i = 0; i < POINTS_PER_COL; i++)
+    {
+      for (size_t j = 0; j < (POINTS_PER_ROW - 1); j++)
+      {
+        int n = i + j * POINTS_PER_COL;
+        p.x = ptrResultCPD->points[n].x;  
+        p.y = ptrResultCPD->points[n].y;  
+        p.z = ptrResultCPD->points[n].z;  
+        line_list.points.push_back(p);
+        p.x = ptrResultCPD->points[n+POINTS_PER_COL].x;  
+        p.y = ptrResultCPD->points[n+POINTS_PER_COL].y;  
+        p.z = ptrResultCPD->points[n+POINTS_PER_COL].z;  
+        line_list.points.push_back(p);
+      }
+    }
+    marker_pub.publish(line_list);
 	}
 }
 
