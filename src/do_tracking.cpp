@@ -30,8 +30,8 @@
 #define DESTINATION_RATE 15
 #define OUTPUT_TIME_INFO true
 #define OUTPUT_DEBUG_INFO false
-#define POINTS_PER_ROW 6
-#define POINTS_PER_COL 20
+#define POINTS_PER_ROW 3
+#define POINTS_PER_COL 10
 /* 1 - Voxel filtering result
  * 2 - Color filtering result
  *
@@ -228,13 +228,13 @@ pcl::PointCloud<pcl::PointXYZRGB> * cpd_matching(pcl::PointCloud<pcl::PointXYZRG
       p.g = 255;
       p.b = 0;
     }
-    else if (i%POINTS_PER_COL == 10)
+    else if (i%POINTS_PER_COL == POINTS_PER_COL/2)
     { 
       p.r = 0;
       p.g = 255;
       p.b = 255;
     }
-    else if (i%POINTS_PER_COL == 19)
+    else if (i%POINTS_PER_COL == POINTS_PER_COL-1)
     { 
       p.r = 255;
       p.g = 255;
