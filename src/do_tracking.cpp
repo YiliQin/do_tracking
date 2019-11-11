@@ -24,6 +24,8 @@
 #include <chrono>
 #include <string>
 
+#include "PointSet.h"
+
 #define FRAME_BASE 30
 #define DESTINATION_RATE 15
 #define OUTPUT_TIME_INFO true
@@ -96,7 +98,7 @@ pcl::PointCloud<pcl::PointXYZRGB> * colorHSV_filter(pcl::PointCloud<pcl::PointXY
 		p.z = cloud.points[i].z;
 		if (OUTPUT_DEBUG_INFO == true)
 			std::cout << "HSV: h=" << p.h << "; s=" << p.s << "; v=" << p.v << std::endl;
-		if ((0 <= p.h && p.h <= 10 || (250 <= p.h && p.h <= 340)) &&
+		if (((0 <= p.h && p.h <= 10) || (250 <= p.h && p.h <= 340)) &&
 					(0.3 <= p.s && p.s <= 0.8) &&
 						(0.35 <= p.v && p.v <= 0.85))
 		{
@@ -178,7 +180,7 @@ pcl::PointCloud<pcl::PointXYZRGB> * cpd_matching(pcl::PointCloud<pcl::PointXYZRG
 	}
 
 	// Generate the point set
-	static Eigen::MatrixXd gen_pointset(120, 3);
+  static gen_point_set::PointSet gen_set(6, 20);
 	static int loop_cpd = 0;
 	loop_cpd++;
 	if (OUTPUT_DEBUG_INFO == true)
@@ -186,75 +188,7 @@ pcl::PointCloud<pcl::PointXYZRGB> * cpd_matching(pcl::PointCloud<pcl::PointXYZRG
 	if (loop_cpd == 1)
 	{
 		std::cout << "Initialze CPD ... " << std::endl;
-		//// Genreate a line
-		//for (size_t i = 0; i < gen_pointset.rows(); i++)
-		//{
-			//double u = (double)(i);
-			//gen_pointset(i, 0) = (u / 10);
-			//gen_pointset(i, 1) = (u / 10);
-			//gen_pointset(i, 2) = (u / 10);
-		//}
-
-		// Genreate a plane
-		int index = 0;
-		for (size_t i = 0; i < gen_pointset.rows()/6; i++)
-		{
-			gen_pointset(index + i, 0) = ((double)(i))/20;
-			//gen_pointset(index + i, 1) = ((double)(i))/3;
-			//gen_pointset(index + i, 2) = ((double)(i))/3;
-			gen_pointset(index + i, 1) = 0.05;
-			gen_pointset(index + i, 2) = 0.0;
-		}
-		index = gen_pointset.rows() / 6;
-		for (size_t i = 0; i < gen_pointset.rows()/6; i++)
-		{
-			//gen_pointset(index + i, 0) = ((double)(i))/3 + 0.5;
-			gen_pointset(index + i, 0) = ((double)(i))/20;
-			//gen_pointset(index + i, 1) = ((double)(i))/3;
-			//gen_pointset(index + i, 2) = ((double)(i))/3;
-			gen_pointset(index + i, 1) = 0.0;
-			gen_pointset(index + i, 2) = 0.0;
-		}
-		index = 2 * gen_pointset.rows() / 6;
-		for (size_t i = 0; i < gen_pointset.rows()/6; i++)
-		{
-			//gen_pointset(index + i, 0) = ((double)(i))/3 - 0.5;
-			gen_pointset(index + i, 0) = ((double)(i))/20;
-			//gen_pointset(index + i, 1) = ((double)(i))/3;
-			//gen_pointset(index + i, 2) = ((double)(i))/3;
-			gen_pointset(index + i, 1) = -0.05;
-			gen_pointset(index + i, 2) = 0.0;
-		}
-    index = 3 * gen_pointset.rows() / 6;
-		for (size_t i = 0; i < gen_pointset.rows()/6; i++)
-		{
-			//gen_pointset(index + i, 0) = ((double)(i))/3 - 0.5;
-			gen_pointset(index + i, 0) = ((double)(i))/20;
-			//gen_pointset(index + i, 1) = ((double)(i))/3;
-			//gen_pointset(index + i, 2) = ((double)(i))/3;
-			gen_pointset(index + i, 1) = -0.10;
-			gen_pointset(index + i, 2) = 0.0;
-		}
-    index = 4 * gen_pointset.rows() / 6;
-		for (size_t i = 0; i < gen_pointset.rows()/6; i++)
-		{
-			//gen_pointset(index + i, 0) = ((double)(i))/3 - 0.5;
-			gen_pointset(index + i, 0) = ((double)(i))/20;
-			//gen_pointset(index + i, 1) = ((double)(i))/3;
-			//gen_pointset(index + i, 2) = ((double)(i))/3;
-			gen_pointset(index + i, 1) = -0.15;
-			gen_pointset(index + i, 2) = 0.0;
-		}
-    index = 5 * gen_pointset.rows() / 6;
-		for (size_t i = 0; i < gen_pointset.rows()/6; i++)
-		{
-			//gen_pointset(index + i, 0) = ((double)(i))/3 - 0.5;
-			gen_pointset(index + i, 0) = ((double)(i))/20;
-			//gen_pointset(index + i, 1) = ((double)(i))/3;
-			//gen_pointset(index + i, 2) = ((double)(i))/3;
-			gen_pointset(index + i, 1) = -0.20;
-			gen_pointset(index + i, 2) = 0.0;
-		}
+    gen_set.gen_point_set();
 	}
 	else 
 	{
@@ -264,8 +198,10 @@ pcl::PointCloud<pcl::PointXYZRGB> * cpd_matching(pcl::PointCloud<pcl::PointXYZRG
 		nonrigid.correspondence("true");
 		nonrigid.outliers(0.1);
 		nonrigid.tolerance(1e-5);
-		cpd::NonrigidResult result = nonrigid.run(dataFixed, gen_pointset);
-		gen_pointset = result.points;
+		//cpd::NonrigidResult result = nonrigid.run(dataFixed, gen_pointset);
+		cpd::NonrigidResult result = nonrigid.run(dataFixed, gen_set.pointSet);
+		//gen_pointset = result.points;
+		gen_set.pointSet = result.points;
 
     auto toc_cpd = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double, std::milli> dur_cpd_ms = toc_cpd - tic_cpd;
@@ -277,12 +213,13 @@ pcl::PointCloud<pcl::PointXYZRGB> * cpd_matching(pcl::PointCloud<pcl::PointXYZRG
 	pcl::PointCloud<pcl::PointXYZRGB> * pointsDisplay = new (pcl::PointCloud<pcl::PointXYZRGB>);
 	pcl::PointXYZRGB p;
 
-	for (size_t i = 0; i < gen_pointset.rows(); i++)
+	//for (size_t i = 0; i < gen_pointset.rows(); i++)
+	for (size_t i = 0; i < gen_set.pointSet.rows(); i++)
 	{
 		// Generate the point cloud
-		p.x = gen_pointset(i, 0);
-		p.y = gen_pointset(i, 1);
-		p.z = gen_pointset(i, 2);
+		p.x = gen_set.pointSet(i, 0);
+		p.y = gen_set.pointSet(i, 1);
+		p.z = gen_set.pointSet(i, 2);
 
 		// Generate the point cloud
     if (i%20 == 0)
@@ -401,6 +338,7 @@ void do_tracking(const sensor_msgs::PointCloud2ConstPtr & input)
 
 int main(int argc, char * argv[])
 {
+
 	// Print out system info
 	std::cout << "PCL Version: " << PCL_VERSION << std::endl;
 	std::cout << "CPD Version: " << cpd::version() << std::endl; 
