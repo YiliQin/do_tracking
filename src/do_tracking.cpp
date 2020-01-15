@@ -100,9 +100,9 @@ pcl::PointCloud<pcl::PointXYZRGB> * colorHSV_filter(pcl::PointCloud<pcl::PointXY
 		p.z = cloud.points[i].z;
 		if (OUTPUT_DEBUG_INFO == true)
 			std::cout << "HSV: h=" << p.h << "; s=" << p.s << "; v=" << p.v << std::endl;
-		if (((0 <= p.h && p.h <= 10) || (250 <= p.h && p.h <= 340)) &&
-					(0.3 <= p.s && p.s <= 0.8) &&
-						(0.35 <= p.v && p.v <= 0.85))
+		if (((0 <= p.h && p.h <= 30) || (320 <= p.h && p.h <= 360)) &&
+					(0.45 <= p.s && p.s <= 0.99) &&
+						(0.23 <= p.v && p.v <= 0.4))
 		{
 			ptrCloudHSV->push_back(p);
 		}
@@ -321,7 +321,7 @@ void do_tracking(const sensor_msgs::PointCloud2ConstPtr & input)
     line_list.pose.orientation.w = 1.0;
     line_list.id = 2;
     line_list.type = visualization_msgs::Marker::LINE_LIST;
-    line_list.scale.x = 0.002;
+    line_list.scale.x = 0.004;
     line_list.color.r = 1.0;
     line_list.color.a = 1.0;
     geometry_msgs::Point p;
